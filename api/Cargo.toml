@@ -6,3 +6,8 @@ edition = "2024"
 [dependencies]
 actix-web = "4"
 diesel_cli = "2.3.5"
+dotenvy = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde"] }
