@@ -12,32 +12,25 @@ pub struct CreateJobRequest {
 }
 
 pub async fn create_job(
-    payload: web::Json<CreateJobRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, ApiError> {
-    verify_solana_pubkey(&payload.solana_pubkey)?;
-    
-    let job = Job {
-        id: Uuid::new_v4(),
-        created_at: Utc::now().naive_utc(),
-        solana_pubkey: payload.solana_pubkey.clone(),
-        desired_prefix: payload.desired_prefix.clone(),
-        desired_suffix: payload.desired_suffix.clone(),
-        result_db_url: payload.result_db_url.clone(),
-        result_table: payload.result_table.clone(),
-        webhook_url: payload.webhook_url.clone(),
-        
-        status: "pending".info(),
-        attempts: 10,
-        
-        matched_address: None,
-        matched_private_key: None,
-        worker_id: None,
-        attestations: None,
+    req: web::Json<CreateJobRequest>,
+) -> HttpResponse {
+
+    let job = insert_job_into_db(&state.db, &req).await?;
+
+    let worker_job = WorkerJob {
+        job_id: job.id.to_string(),
+        pattern_prefix: job.pattern_prefix.clone(),
+        pattern_suffix: job.pattern_suffix.clone(),
+        user_encryption_pubkey: job.user_pubkey.clone(),
+        webhook_url: job.webhook_url.clone(),
     };
-    
-    insert_job(&state.db, &job).await?;
-    enqueue_job( &job).await?;
-    
-    Ok(HttpResponse::Ok().json(job.id))
+
+    enqueue_job(&state.redis, &worker_job).await
+        .map_err(|_| HttpResponse::InternalServerError())?;
+
+    HttpResponse::Ok().json(CreateJobResponse {
+        job_id: job.id.to_string(),
+        status: "queued",
+    })
 }
