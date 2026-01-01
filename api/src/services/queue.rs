@@ -1,26 +1,23 @@
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
+use redis::AsyncCommands;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct WorkerJob {
     pub job_id: String,
-    pub solana_pubkey: String,
-    pub desired_prefix: String,
-    pub desired_suffix: String,
+    pub pattern_prefix: String,
+    pub pattern_suffix: Option<String>,
+    pub user_encryption_pubkey: String,
+    pub webhook_url: String,
 }
 
-pub fn enqueue_job(job: WorkerJob) {
-    // Implementation to enqueue the job
-    let payload = WorkerJob {
-        job_id: Job.id.to_string(),
-        solana_pubkey: job.solana_pubkey.clone(),
-        desired_prefix: job.desired_prefix.clone(),
-        desired_suffix: job.desired_suffix.clone(),
-    };
-    
-    redis::cmd("LPUSH")
-        .arg("queue")
-        .arg(serde_json::to_string(&payload))
-        .execute(&mut conn);
-        
-        Ok(())
+pub async fn enqueue_job(
+    redis: &redis::Client,
+    payload: &WorkerJob,
+) -> anyhow::Result<()> {
+    let mut conn = redis.get_async_connection().await?;
+
+    let msg = serde_json::to_string(payload)?;
+    conn.lpush::<_, _, ()>("aidp:jobs", msg).await?;
+
+    Ok(())
 }
