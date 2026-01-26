@@ -1,3 +1,5 @@
+pub mod cpu;
+
 use solana_sdk::pubkey::Pubkey;
 
 pub struct VanityMatch {
@@ -6,10 +8,5 @@ pub struct VanityMatch {
 }
 
 pub trait VanityEngine {
-    fn search(
-        &self,
-        prefix: &str,
-        suffix: Option<&str>,
-        max_results: usize,
-    ) -> Vec<VanityMatch>;
+    fn search(&self, prefix: &str, suffix: Option<&str>, max_results: usize) -> Vec<VanityMatch>;
 }
