@@ -1,7 +1,6 @@
-use rand::rngs::OsRng;
 use rand::RngCore;
-use solana_sdk::{pubkey::Pubkey, signature::Keypair};
-use bs58;
+use rand::rngs::OsRng;
+use solana_sdk::signature::{Keypair, SeedDerivable, Signer};
 
 use super::{VanityEngine, VanityMatch};
 
@@ -14,12 +13,7 @@ impl CpuVanityEngine {
 }
 
 impl VanityEngine for CpuVanityEngine {
-    fn search(
-        &self,
-        prefix: &str,
-        suffix: Option<&str>,
-        max_results: usize,
-    ) -> Vec<VanityMatch> {
+    fn search(&self, prefix: &str, suffix: Option<&str>, max_results: usize) -> Vec<VanityMatch> {
         let mut results = Vec::new();
 
         while results.len() < max_results {
@@ -40,10 +34,7 @@ impl VanityEngine for CpuVanityEngine {
                 }
             }
 
-            results.push(VanityMatch {
-                pubkey,
-                seed,
-            });
+            results.push(VanityMatch { pubkey, seed });
         }
 
         results
