@@ -1,28 +1,73 @@
-mod job;
+mod attestation;
+
+mod encrypt;
 mod gpu;
+mod http;
+mod job;
+mod queue;
+mod types;
 
-use std::str::from_boxed_utf8_unchecked;
-
+use attestation::sign_attestation;
+use encrypt::encrypt_seed;
 use gpu::VanityEngine;
 use gpu::cpu::CpuVanityEngine;
-use job::WorkerJob;
+use queue::JobQueue;
+use solana_sdk::signature::{Keypair, Signer};
+use std::{thread, time::Duration};
 
 fn main() {
-    let job = fetch_job_from_redis(); // todo add fetch job from redis to excute
-    
-    println!("Job received: {:?}", job.job_id);
-    
-    let engine =  CpuVanityEngine::new();
-    
-    let matches = engine.search(
-        &job.desired_prefix,
-        job.desired_suffix.as_deref(),
-        10,
-    );
-    for m in matches{
-        print!("match found: {}", m.pubkey.to_string());
-        
+    println!("Starting VanityGPU Worker...");
+
+    // Generate or load worker identity
+    // For now, ephemeral worker instance identity
+    let worker_keypair = Keypair::new();
+    println!("Worker Pubkey: {}", worker_keypair.pubkey());
+
+    let queue = JobQueue::new();
+    let engine = CpuVanityEngine::new();
+
+    loop {
+        match queue.pop_job() {
+            Some(job) => {
+                println!("Processing job: {}", job.job_id);
+
+                // 1. Search (Compute)
+                let matches = engine.search(
+                    &job.desired_prefix,
+                    job.desired_suffix.as_deref(),
+                    10, // Assuming fixed count for now, job might specify it
+                );
+
+                if matches.is_empty() {
+                    println!("No matches found (check timeout/prefixes)");
+                    continue;
+                }
+
+                // 2. Encrypt & Zeroize (Security)
+                let mut secure_results = Vec::new();
+                for mut m in matches {
+                    let encrypted = encrypt_seed(&mut m.seed, &job.user_encryption_pubkey);
+                    secure_results.push((m, encrypted));
+                }
+
+                // 3. Attest (Proof)
+                let attestation = sign_attestation(&job.job_id, &secure_results, &worker_keypair);
+
+                // 4. Report (Delivery)
+                match http::report_success(
+                    &job.webhook_url,
+                    &job.job_id,
+                    secure_results,
+                    attestation,
+                ) {
+                    Ok(_) => println!("Job {} reported successfully", job.job_id),
+                    Err(e) => println!("Failed to report job {}: {}", job.job_id, e),
+                }
+            }
+            None => {
+                // No job, wait a bit (though blpop handles wait, extra safety)
+                thread::sleep(Duration::from_millis(100));
+            }
+        }
     }
-    
-    //todo: add  encryption seeds and sign attestation callback API
 }
